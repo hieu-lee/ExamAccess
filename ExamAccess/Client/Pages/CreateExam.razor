@@ -1,0 +1,316 @@
+﻿@page "/exam-create/{ExamName}"
+@page "/exam-create/{ExamName}/{TitleSeted:bool}/{Title}"
+@using ExamAccess.Client.Components;
+@inject StateContainer State;
+@inject IJSRuntime JsRuntime;
+@inject HttpClient Http;
+@inject NavigationManager navigationManager;
+
+@if (loading)
+{
+    <p>Loading data...</p>
+    <MatProgressCircle Indeterminate="true" Size="MatProgressCircleSize.Medium" />
+}
+else
+{
+    if (verify)
+    {
+        if (!TitleSeted)
+        {
+            <h3>Set title for your new exam</h3>
+            <MatTextField @bind-Value="Title" Label="Title" Required="true"></MatTextField>
+            <br />
+            <MatButton Unelevated="true" @onclick="SetTitle">Confirm</MatButton>
+        }
+
+
+        if (TitleSeted)
+        {
+            <div class="mat-layout-grid-cell mat-layout-grid-cell-span-12 mat-elevation-z5 index-row-item mdc-theme--surface">
+                <h1>@Title</h1>
+                <h5 style="text-align:center; display:@TimeDisplay;">Time limit: @minutes.ToString() minutes</h5>
+                <ul style="margin: 0 10px;">
+                    <Virtualize Items="questions" Context="ques">
+                        <li>
+                            <Question label="@questionLabel" number="@ques.id" question="@ques.question" answerA="@ques.answerA" answerB="@ques.answerB" answerC="@ques.answerC" answerD="@ques.answerD">
+                            </Question>
+                        </li>
+                    </Virtualize>
+                </ul>
+            </div>
+            <MatTabGroup>
+                <MatTab Label="New Question">
+                    <div style="margin: 15px 0;">
+                        <MatTextField @bind-Value="NewTitle" Label="Question Content" TextArea="true" Style="max-width: 478px; resize: vertical; height: 55px;" FullWidth="true"></MatTextField>
+                        <div class="new-answers" style="margin-top: 10px;">
+                            <MatRadioGroup @bind-Value="@Answer" TValue="string">
+                                <div class="choice">
+                                    <MatRadioButton Value="@("A")" TValue="string"></MatRadioButton><MatTextField @bind-Value="NewAnswerA" TextArea="true" Label="Answer A" Style="max-width: 438px; resize: vertical; height: 55px;" FullWidth="true"></MatTextField>
+                                </div>
+                                <div class="choice">
+                                    <MatRadioButton Value="@("B")" TValue="string"></MatRadioButton><MatTextField @bind-Value="NewAnswerB" TextArea="true" Label="Answer B" Style="max-width: 438px; resize: vertical; height: 55px;" FullWidth="true"></MatTextField>
+                                </div>
+                                <div class="choice">
+                                    <MatRadioButton Value="@("C")" TValue="string"></MatRadioButton><MatTextField @bind-Value="NewAnswerC" TextArea="true" Label="Answer C" Style="max-width: 438px; resize: vertical; height: 55px;" FullWidth="true"></MatTextField>
+                                </div>
+                                <div class="choice">
+                                    <MatRadioButton Value="@("D")" TValue="string"></MatRadioButton><MatTextField @bind-Value="NewAnswerD" TextArea="true" Label="Answer D" Style="max-width: 438px; resize: vertical; height: 55px;" FullWidth="true"></MatTextField>
+                                </div>
+                                <br />
+                            </MatRadioGroup>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:20px; margin-top: 10px;">
+                        <MatButton Unelevated="true" @onclick="CreateNewQuestion">Add Question</MatButton>
+                        <MatButton @onclick="DeleteLastQuestion" Style="margin-left: 10px;">Pop Question</MatButton>
+                        <MatButton @onclick="DeleteExam" Style="margin-left: 10px;">Delete</MatButton>
+                    </div>
+                </MatTab>
+                <MatTab Label="Exam Setting">
+                    <div style="margin: 15px 0;">
+                        <MatTextField @bind-Value="questionLabel" Label="Question label"></MatTextField>
+                        <MatButton @onclick="SetLabel" Unelevated="true" Style="margin-left: 10px;">Set common label</MatButton>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <MatTextField Type="number" TValue="int" @bind-Value="minutes" Label="Minutes"></MatTextField>
+                        <MatButton @onclick="SetTime" Unelevated="true" Style="margin-left: 10px; width: 187px;">Set time limit</MatButton>
+                    </div>
+                    <b>Not show correction when submit</b> <MatSlideToggle @onclick="ChangeExamPrivacy" @bind-Value="Privacy" Style="margin-left: 10px;"></MatSlideToggle><br /><br />
+                    <b>Add question mark when missing</b> <MatSlideToggle @bind-Value="autoadd" Style="margin-left: 12px;"></MatSlideToggle>
+                </MatTab>
+            </MatTabGroup>
+        }
+    }
+    else
+    {
+        <h1>Welcome to Exam Access</h1>
+        <h4>You have to log in as admin to create exam</h4>
+    }
+}
+
+@code {
+    [Parameter]
+    public string ExamName { get; set; } = "exam";
+
+    [Parameter]
+    public bool TitleSeted { get; set; } = false;
+
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    public string questionLabel { get; set; }
+    private bool autoadd = true;
+    private bool loading = true;
+    private int minutes;
+    private bool verify = false;
+    private bool Privacy = false;
+    private string prevLabel = "Question";
+    private int prevTimeLimit = 0;
+    private string TimeDisplay = "none";
+    private string NewTitle = string.Empty;
+    private string NewAnswerA = string.Empty;
+    private string NewAnswerB = string.Empty;
+    private string NewAnswerC = string.Empty;
+    private string NewAnswerD = string.Empty;
+    private string Answer;
+    private List<QuestionInfo> questions = new List<QuestionInfo>();
+    private int CurrentQuestionNumber = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        verify = (State.logged && State.admin);
+        loading = false;
+        if (verify)
+        {
+            if (TitleSeted)
+            {
+                var info = await Http.GetFromJsonAsync<Tuple<List<QuestionInfo>, int, bool, string>>($"api/Exams/{ExamName}");
+                questions = info.Item1;
+                minutes = info.Item2;
+                Privacy = info.Item3;
+                questionLabel = info.Item4;
+                if (minutes > 0)
+                {
+                    TimeDisplay = "block";
+                    prevTimeLimit = minutes;
+                }
+                CurrentQuestionNumber = questions.Count + 1;
+            }
+        }
+    }
+
+    private async void CreateNewExam()
+    {
+        Exam exam = new() { code = ExamName, name = Title };
+        await Http.PostAsJsonAsync<Exam>("api/Exams", exam);
+    }
+
+    private async void SetTitle()
+    {
+        if (string.IsNullOrWhiteSpace(Title))
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "Please set a title for your new exam.");
+            return;
+        }
+        else
+        {
+            if (Title.Contains('?') || Title.Contains('/') || Title.Contains('\\') || Title.Contains('@') || Title.Contains('$'))
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "The title must not contain special characters");
+                return;
+            }
+            Title.Trim();
+            Title = Title.First().ToString().ToUpper() + Title.Substring(1);
+            TitleSeted = true;
+            CreateNewExam();
+            StateHasChanged();
+        }
+    }
+
+    private async void PopFromDb()
+    {
+        await Http.DeleteAsync($"api/Exams/{ExamName}/{CurrentQuestionNumber}");
+    }
+
+    private async Task InsertQuestionAsync(QuestionInfo info)
+    {
+        await Http.PostAsJsonAsync<QuestionInfo>($"api/Exams/{ExamName}", info);
+    }
+
+    private async void DeleteExam()
+    {
+        var task = Http.DeleteAsync($"api/Exams/{ExamName}");
+        await JsRuntime.InvokeAsync<object>("alert", "Successfully deleted the exam.");
+        await task;
+        navigationManager.NavigateTo($"/removed/{ExamName}");
+    }
+
+    private async void SetLabel()
+    {
+        if (!string.IsNullOrWhiteSpace(questionLabel))
+        {
+            if (questionLabel.Contains('\''))
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "The lable cannot contain any special character");
+                return;
+            }
+            questionLabel = questionLabel.Trim();
+            questionLabel = questionLabel.First().ToString().ToUpper() + questionLabel.Substring(1);
+            StateHasChanged();
+            if (questionLabel != prevLabel)
+            {
+                prevLabel = questionLabel;
+                await Http.PutAsJsonAsync<string>($"api/Exams/{ExamName}/label", questionLabel);
+                return;
+            }
+        }
+    }
+
+    private void DeleteLastQuestion()
+    {
+        if (CurrentQuestionNumber > 1)
+        {
+            questions.RemoveAt(CurrentQuestionNumber - 2);
+            CurrentQuestionNumber--;
+            PopFromDb();
+        }
+    }
+
+    private async void ChangeExamPrivacy()
+    {
+        Privacy = !Privacy;
+        await Http.PutAsJsonAsync<bool>($"api/Exams/{ExamName}/privacy", Privacy);
+    }
+
+    private async void SetTime()
+    {
+        if (minutes > 0 && minutes != prevTimeLimit)
+        {
+            var task = Http.PutAsJsonAsync<int>($"api/Exams/{ExamName}/time", minutes);
+            TimeDisplay = "block";
+            await task;
+            prevTimeLimit = minutes;
+            return;
+        }
+        else if (minutes == 0 && minutes != prevTimeLimit)
+        {
+            var task = Http.PutAsJsonAsync<int>($"api/Exams/{ExamName}/time", 0);
+            TimeDisplay = "none";
+            await task;
+            prevTimeLimit = 0;
+            return;
+        }
+        else
+        {
+            TimeDisplay = "none";
+            minutes = 0;
+            prevTimeLimit = 0;
+            return;
+        }
+    }
+
+    private async void CreateNewQuestion()
+    {
+        if (CurrentQuestionNumber == 200)
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "You have reached the maximum number of questions for this exam!");
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(NewTitle) && !string.IsNullOrWhiteSpace(NewAnswerA) && !string.IsNullOrWhiteSpace(NewAnswerB) && !string.IsNullOrWhiteSpace(NewAnswerC) && !string.IsNullOrWhiteSpace(NewAnswerD))
+        {
+            if (NewTitle.Contains('\'') || NewAnswerA.Contains('\'') || NewAnswerB.Contains('\'') || NewAnswerC.Contains('\'') || NewAnswerD.Contains('\''))
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "The question must not contain special characters");
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(Answer))
+            {
+                var Answers = new HashSet<string>();
+                NewTitle.Trim();
+                NewAnswerA.Trim();
+                NewAnswerB.Trim();
+                NewAnswerC.Trim();
+                NewAnswerD.Trim();
+                Answers.Add(NewAnswerA);
+                Answers.Add(NewAnswerB);
+                Answers.Add(NewAnswerC);
+                Answers.Add(NewAnswerD);
+                if (Answers.Count < 4)
+                {
+                    await JsRuntime.InvokeAsync<object>("alert", "Your given answers must be different from each other.");
+                    return;
+                }
+                if (autoadd)
+                {
+                    if (NewTitle.Last() != '?')
+                    {
+                        NewTitle += "?";
+                    }
+                }
+                NewTitle = NewTitle.First().ToString().ToUpper() + NewTitle.Substring(1);
+                var NewQuestion = new QuestionInfo() { question = NewTitle, id = CurrentQuestionNumber, answerA = NewAnswerA, answerB = NewAnswerB, answerC = NewAnswerC, answerD = NewAnswerD, answer = Answer };
+                var task1 = InsertQuestionAsync(NewQuestion);
+                questions.Add(NewQuestion);
+                NewTitle = string.Empty;
+                NewAnswerA = string.Empty;
+                NewAnswerB = string.Empty;
+                NewAnswerC = string.Empty;
+                NewAnswerD = string.Empty;
+                Answer = string.Empty;
+                CurrentQuestionNumber++;
+                StateHasChanged();
+                await task1;
+            }
+            else
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "Please choose a correct answer to the question.");
+                return;
+            }
+        }
+        else
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "Please fill in all parts of the new question.");
+            return;
+        }
+    }
+}

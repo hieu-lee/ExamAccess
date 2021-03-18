@@ -1,0 +1,15 @@
+﻿h1 {
+    text-align: center;
+}
+
+ul {
+    padding: 0;
+}
+
+    ul li {
+        list-style: none;
+    }
+
+.choice {
+    display: flex;
+}

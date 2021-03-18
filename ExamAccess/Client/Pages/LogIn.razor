@@ -1,0 +1,181 @@
+﻿@page "/log-in"
+@page "/log-in/{register:bool}"
+@inject IJSRuntime JsRuntime;
+@inject NavigationManager navigationManager;
+@inject StateContainer State;
+@inject HttpClient Http;
+
+<h1>Welcome to Exam Access</h1>
+@if (loading)
+{
+    <p>Loading data...</p>
+    <MatProgressCircle Indeterminate="true" Size="MatProgressCircleSize.Medium" />
+}
+else
+{
+    if (!logged)
+    {
+        if (!register)
+        {
+            <div>
+                <MatTextField @bind-Value="@username" Label="Username" Required="true"></MatTextField><br />
+                <MatTextField @bind-Value="@password" Label="Password" Type="password" Required="true"></MatTextField><br />
+                <p>Don't have an account yet? <a @onclick="() => { username = string.Empty; password = string.Empty; }" href="log-in/true">Register</a></p>
+                <MatButton Raised="true" @onclick="SignIn">Log In</MatButton>
+            </div>
+        }
+        else
+        {
+            <div>
+                <MatTextField @bind-Value="@fname" Label="First Name" Required="true"></MatTextField><br />
+                <MatTextField @bind-Value="@lname" Label="Last Name" Required="true"></MatTextField><br />
+                <MatTextField @bind-Value="@username" Label="Username" Required="true"></MatTextField><br />
+                <MatTextField @bind-Value="@password" Label="Password" Type="password" Required="true"></MatTextField><br />
+                <MatRadioGroup @bind-Value="admin">
+                    <MatRadioButton Value="false" Style="padding-bottom: 13px;"></MatRadioButton><span>User</span>
+                    <MatRadioButton Value="true" Style="padding-bottom: 13px;"></MatRadioButton><span>Admin</span>
+                </MatRadioGroup><br />
+                <MatButton Raised="true" @onclick="SignUp">Sign Up</MatButton>
+            </div>
+        }
+    }
+    else
+    {
+        <h5>You have already logged in</h5>
+        <MatButton Raised="true" @onclick="SignOut">Log Out</MatButton>
+    }
+}
+
+@code {
+    Task t;
+    [Parameter]
+    public bool register { get; set; } = false;
+    private bool admin = false;
+    private bool loading = true;
+    private bool logged;
+    private string fname = string.Empty;
+    private string lname = string.Empty;
+    private string username = string.Empty;
+    string password = string.Empty;
+    private Dictionary<string, Tuple<string, string, bool>> Accounts = new();
+
+    protected override void OnInitialized()
+    {
+        t = GetAccounts();
+        logged = State.logged;
+        loading = false;
+        StateHasChanged();
+    }
+
+
+
+    private async Task GetAccounts()
+    {
+        var accountlist = await Http.GetFromJsonAsync<List<Account>>("api/Accounts");
+        foreach (var acc in accountlist)
+        {
+            if (!Accounts.ContainsKey(acc.username))
+            {
+                Accounts.Add(acc.username, new Tuple<string, string, bool>(acc.password, acc.name, acc.admin));
+            }
+        }
+    }
+
+    private async void SignIn()
+    {
+        username = username.Trim();
+        password = password.Trim();
+        await t;
+        if (Accounts.ContainsKey(username))
+        {
+            if (Accounts[username].Item1 == password)
+            {
+                State.user = Accounts[username].Item2;
+                State.account = username;
+                State.logged = true;
+                State.admin = Accounts[username].Item3;
+                await JsRuntime.InvokeAsync<object>("alert", "Successfully logged in!");
+                navigationManager.NavigateTo("/home");
+                return;
+            }
+            else
+            {
+                t = GetAccounts();
+                await JsRuntime.InvokeAsync<object>("alert", "Your password is incorrect!");
+                return;
+            }
+        }
+        else
+        {
+            t = GetAccounts();
+            await JsRuntime.InvokeAsync<object>("alert", "Your username is incorrect!");
+            return;
+        }
+    }
+
+    private async void SignUp()
+    {
+        if (string.IsNullOrWhiteSpace(fname) || string.IsNullOrWhiteSpace(lname) || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "Please fill in all the information!");
+            return;
+        }
+        fname = fname.Trim();
+        fname = fname.First().ToString().ToUpper() + fname.Substring(1);
+        lname = lname.Trim();
+        lname = lname.First().ToString().ToUpper() + lname.Substring(1);
+        username = username.Trim();
+        if (password.Length < 6 || password.Contains(' '))
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "The password must have at least 6 characters and not contain any whitespace");
+            return;
+        }
+        await t;
+        if (!Accounts.ContainsKey(username) && username != "history")
+        {
+            var name = $"{fname} {lname}";
+            var myacc = new Account() { username = username, password = password, name = name, admin = admin };
+            if (admin)
+            {
+                var task = Http.PostAsJsonAsync<Account>("api/Accounts/admin", myacc);
+                State.admin = admin;
+                admin = false;
+                State.user = name;
+                State.account = username;
+                State.logged = logged;
+                await JsRuntime.InvokeAsync<object>("alert", "Successfully logged in with your new account!");
+                await task;
+                navigationManager.NavigateTo("/home");
+            }
+            else
+            {
+                var task = Http.PostAsJsonAsync<Account>("api/Accounts/user", myacc);
+                State.admin = admin;
+                admin = false;
+                State.user = name;
+                State.account = username;
+                State.logged = logged;
+                await JsRuntime.InvokeAsync<object>("alert", "Successfully logged in with your new account!");
+                await task;
+                navigationManager.NavigateTo("/home");
+            }
+        }
+        else
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "Your username has already been taken");
+            t = GetAccounts();
+            return;
+        }
+    }
+
+    private async void SignOut()
+    {
+        State.user = string.Empty;
+        State.account = string.Empty;
+        State.admin = false;
+        State.logged = false;
+        await JsRuntime.InvokeAsync<object>("alert", "Successfully logged out!");
+        logged = false;
+        StateHasChanged();
+    }
+}

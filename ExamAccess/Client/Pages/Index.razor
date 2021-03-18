@@ -1,0 +1,179 @@
+﻿@page "/"
+@page "/home"
+@page "/removed/{RemovedExam}"
+@page "/{DoExam:bool}"
+@inject StateContainer State;
+@inject NavigationManager navigationManager;
+@inject IJSRuntime JsRuntime;
+@inject HttpClient Http;
+
+<h1>Welcome @user to Exam Access</h1>
+@if (loading)
+{
+    <p>Loading data...</p>
+    <MatProgressCircle Indeterminate="true" Size="MatProgressCircleSize.Medium" />
+}
+else
+{
+    if (logged)
+    {
+        <h5>Available exams:</h5>
+        if (!DoExam)
+        {
+            if (admin)
+            {
+                if (Exams.Count == 0)
+                {
+                    <ul>
+                        <li>There is no exam avaible yet.</li>
+                    </ul>
+                }
+                else
+                {
+                    <ul style="max-height:450px;overflow-y:scroll">
+                        <Virtualize Items="@Exams.Keys" Context="name">
+                            <li><a href="/exam-create/@name/true/@Exams[name].Item1"><img src="document.png" /></a><p>Code: @name<br />Name: @Exams[name].Item1<br />Time limit: @Exams[name].Item2.ToString() minute(s)</p></li>
+                        </Virtualize>
+                    </ul>
+                }
+                <hr />
+                <h3>Add new exam</h3>
+                <MatTextField @bind-Value="NewExamCode" Label="New Examcode"></MatTextField>
+                <br />
+                <MatButton @onclick="CreateNewExam" Unelevated="true" Style="margin-bottom: 20px;">Add</MatButton>
+            }
+            else
+            {
+                <p>
+                    This is a product of Hieu Le. This app will allow you to create and do exams.<br />
+                    However, in order to be able to create exams, you have to log in as admin.<br />
+                    If you are not the admin, you are only able to do exams.
+                </p>
+                <h6>This is your history of doing:</h6>
+                <ul style="max-height:375px;overflow-y:scroll">
+                    <Virtualize Items="@history" Context="result">
+                        <li><img src="document.png" />Exam: @result.examCode<br />Score: @result.score.ToString()% at @result.time<hr /></li>
+                    </Virtualize>
+                </ul>
+            }
+        }
+        else
+        {
+            if (Exams.Count == 0)
+            {
+                <ul>
+                    <li>There is no exam avaible yet.</li>
+                </ul>
+            }
+            else
+            {
+                <ul style="max-height:450px;overflow-y:scroll">
+                    <Virtualize Items="@Exams.Keys" Context="name">
+                        <li><a href="/do-exam/@name/@Exams[name].Item1"><img src="document.png" /></a><p>Code: @name<br />Name: @Exams[name].Item1<br />Time limit: @Exams[name].Item2.ToString() minute(s)</p></li>
+                    </Virtualize>
+                </ul>
+            }
+        }
+    }
+    else
+    {
+        <h4>Log in to start using Exam Access</h4>
+    }
+}
+
+@code {
+    [Parameter]
+    public bool DoExam { get; set; } = false;
+    [Parameter]
+    public string RemovedExam { get; set; } = null;
+    private bool logged = false;
+    private bool admin = false;
+    private string user = string.Empty;
+    private string account = string.Empty;
+    private string NewExamCode;
+    private bool loading = true;
+    private Dictionary<string, Tuple<string, int>> Exams = new();
+    private List<ExamResult> history = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var task = Http.GetFromJsonAsync<IEnumerable<Exam>>("api/Exams");
+        admin = State.admin;
+        user = State.user;
+        account = State.account;
+        logged = State.logged;
+        loading = false;
+        if (logged)
+        {
+            if (!admin && !string.IsNullOrWhiteSpace(account))
+            {
+                var t = Http.GetFromJsonAsync<List<ExamResult>>($"api/Accounts/{account}");
+                var exams = await task;
+                Parallel.ForEach(exams, exam =>
+                {
+                    if (!Exams.ContainsKey(exam.code))
+                    {
+                        Exams.Add(exam.code, new Tuple<string, int>(exam.name, exam.time));
+                    }
+                    else
+                    {
+                        Exams[exam.code] = new Tuple<string, int>(exam.name, exam.time);
+                    }
+                });
+                history = await t;
+                history.Sort();
+            }
+            else
+            {
+                var exams = await task;
+                Parallel.ForEach(exams, exam =>
+                {
+                    if (!Exams.ContainsKey(exam.code))
+                    {
+                        Exams.Add(exam.code, new Tuple<string, int>(exam.name, exam.time));
+                    }
+                    else
+                    {
+                        Exams[exam.code] = new Tuple<string, int>(exam.name, exam.time);
+                    }
+                });
+            }
+        }
+        else
+        {
+            navigationManager.NavigateTo("/log-in");
+        }
+        if (!string.IsNullOrWhiteSpace(RemovedExam))
+        {
+            Exams.Remove(RemovedExam);
+        }
+    }
+
+    private async void CreateNewExam()
+    {
+        if (string.IsNullOrWhiteSpace(NewExamCode))
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "Please fill in the examcode.");
+            return;
+        }
+        else
+        {
+            if (NewExamCode.Contains('?') || NewExamCode.Contains('/') || NewExamCode.Contains('\\') || NewExamCode.Contains('@') || NewExamCode.Contains('$'))
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "The examcode cannot contain any special characters");
+                return;
+            }
+            NewExamCode = NewExamCode.Trim();
+            if (Exams.ContainsKey(NewExamCode))
+            {
+                await JsRuntime.InvokeAsync<object>("alert", "Examcode has already existed!");
+                NewExamCode = string.Empty;
+                return;
+            }
+            else
+            {
+                navigationManager.NavigateTo($"/exam-create/{NewExamCode}");
+            }
+        }
+    }
+}

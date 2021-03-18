@@ -1,0 +1,203 @@
+﻿@page "/do-exam/{ExamCode}/{ExamName}"
+@using ExamAccess.Client.Components;
+@using System.Timers;
+@inject IJSRuntime JsRuntime
+@inject NavigationManager navigationManager
+@inject StateContainer State
+@inject HttpClient Http
+
+
+@if (loading)
+{
+    <p>Loading data...</p>
+    <MatProgressCircle Indeterminate="true" Size="MatProgressCircleSize.Medium" />
+}
+else
+{
+    if (verify)
+    {
+        <div class="mat-layout-grid-cell mat-layout-grid-cell-span-12 mat-elevation-z5 index-row-item mdc-theme--surface" style="padding: 10px; margin-bottom: 20px;">
+            <h1>@ExamName</h1>
+            <h5 style="text-align:center; display:@TimeDisplay;">Time limit: @minutes.ToString() minutes</h5>
+            <ul>
+                <Virtualize Items="@questions" Context="ques">
+                    <li style="background-color:@ques.color;">
+                        <Question label="@questionLabel" personalWork="@personalWork" number="@ques.id" question="@ques.question" answerA="@ques.answerA" answerB="@ques.answerB" answerC="@ques.answerC" answerD="@ques.answerD">
+                        </Question>
+                        <div style="color:white; display:@ques.answerDisplay; margin-top: 5px;">Correct answer: @ques.answer</div>
+                    </li>
+                </Virtualize>
+            </ul>
+            <div class="button-holder">
+                <MatButton Unelevated="true" @onclick="ShowScore">Submit</MatButton>
+            </div>
+        </div>
+    }
+    else
+    {
+        <h1>Welcome to Exam Access</h1>
+        <h4>You have to log in to do exam</h4>
+    }
+}
+
+@code {
+    [Parameter]
+    public string ExamCode { get; set; }
+    [Parameter]
+    public string ExamName { get; set; }
+
+    public string questionLabel { get; set; } = "Question";
+    private bool admin = false;
+    private bool loading = true;
+    private int minutes;
+    private bool verify = false;
+    private bool Privacy = false;
+    private bool haveQuesions = false;
+    private int TimeLeft;
+    private static Timer timer;
+    private string TimeDisplay = "none";
+    private string user;
+    private List<string> colors = new();
+    public Dictionary<int, string> personalWork = new();
+    private Dictionary<int, string> solutionKey = new();
+    private List<QuestionInfo> questions = new List<QuestionInfo>();
+    private bool submitted = false;
+
+    private async void CountDown(Object source, System.Timers.ElapsedEventArgs e)
+    {
+        if (TimeLeft > 1)
+        {
+            TimeLeft -= 1;
+        }
+        else
+        {
+            timer.Enabled = false;
+            await InvokeAsync(ShowScore);
+        }
+    }
+
+    private void StartTimer()
+    {
+        if (!submitted)
+        {
+            TimeLeft = minutes;
+            timer = new(60000);
+            timer.Elapsed += CountDown;
+            timer.Enabled = true;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        verify = State.logged;
+        admin = State.admin;
+        user = State.account;
+        loading = false;
+        submitted = false;
+        if (verify)
+        {
+            var info = await Http.GetFromJsonAsync<Tuple<List<QuestionInfo>, int, bool, string>>($"api/Exams/{ExamCode}");
+            questions = info.Item1;
+            Parallel.ForEach(questions, ques =>
+            {
+                if (!solutionKey.ContainsKey(ques.id))
+                {
+                    haveQuesions = true;
+                    solutionKey.Add(ques.id, ques.answer);
+                }
+            });
+            minutes = info.Item2;
+            Privacy = info.Item3;
+            questionLabel = info.Item4;
+            if (minutes > 0)
+            {
+                TimeDisplay = "block";
+                StartTimer();
+            }
+        }
+    }
+
+    private async void ShowScore()
+    {
+        if (submitted)
+        {
+            return;
+        }
+        if (minutes > 0)
+        {
+            timer.Enabled = false;
+        }
+        submitted = true;
+        if (haveQuesions)
+        {
+            var score = 0;
+            var max = 0;
+            if (!Privacy)
+            {
+                Parallel.ForEach(solutionKey.Keys, qnum =>
+                {
+                    max++;
+                    try
+                    {
+                        if (solutionKey[qnum] == personalWork[qnum])
+                        {
+                            questions[qnum - 1].color = "#95FF80";
+                            score++;
+                        }
+                        else
+                        {
+                            questions[qnum - 1].color = "#FF4D6A";
+                            questions[qnum - 1].answerDisplay = "block";
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        questions[qnum - 1].color = "#FF4D6A";
+                        questions[qnum - 1].answerDisplay = "block";
+                    }
+                });
+            }
+            else
+            {
+                Parallel.ForEach(solutionKey.Keys, qnum =>
+                {
+                    max++;
+                    try
+                    {
+                        if (solutionKey[qnum] == personalWork[qnum])
+                        {
+                            score++;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                });
+            }
+            var percent = Convert.ToDouble(score) / Convert.ToDouble(max);
+            percent *= 100.0;
+            var res = Math.Round(percent, 2);
+            var task2 = JsRuntime.InvokeAsync<object>("alert", $"You got {score.ToString()}/{max.ToString()} answers correct, and a result of {res.ToString()}%");
+            var localrecord = new ExamResult() { examCode = ExamCode, score = res, time = DateTime.Now.ToString() };
+            var universalrecord = new Record() { username = user, examCode = ExamCode, score = res, time = DateTime.Now.ToString() };
+            List<Task> tasks = new();
+            if (!admin)
+            {
+                var task3 = Http.PostAsJsonAsync<ExamResult>($"api/Accounts/result/{user}", localrecord);
+                tasks.Add(task3);
+            }
+            var task4 = Http.PostAsJsonAsync<Record>("api/Records", universalrecord);
+            tasks.Add(task4);
+            StateHasChanged();
+            await task2;
+            foreach (var t in tasks)
+            {
+                await t;
+            }
+        }
+        else
+        {
+            await JsRuntime.InvokeAsync<object>("alert", "This exam does not have any question");
+        }
+    }
+}

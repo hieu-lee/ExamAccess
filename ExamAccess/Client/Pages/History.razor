@@ -1,0 +1,73 @@
+﻿@page "/history"
+@inject NavigationManager navigationManager
+@inject IJSRuntime JsRuntime
+@inject StateContainer State
+@inject HttpClient Http
+
+<h1>Welcome @user to Exam Access</h1>
+@if (loading)
+{
+    <p>Loading data...</p>
+    <MatProgressCircle Indeterminate="true" Size="MatProgressCircleSize.Medium" />
+}
+else
+{
+    if (!string.IsNullOrWhiteSpace(user))
+    {
+        if (admin)
+        {
+            <div class="mat-layout-grid-cell mat-layout-grid-cell-span-12 mat-elevation-z5 index-row-item mdc-theme--surface" style="max-height: 600px; overflow-y:scroll; margin-top: 50px;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Exam</th>
+                            <th>Score</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <Virtualize Context="record" Items="@history">
+                            <tr>
+                                <td>@record.username</td>
+                                <td>@record.examCode</td>
+                                <td>@record.score.ToString()%</td>
+                                <td>@record.time</td>
+                            </tr>
+                        </Virtualize>
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <h3>Only admin can see the universal record, you can still see your personal record in the home page.</h3>
+        }
+    }
+    else
+    {
+        <h4>Log in to start using Exam Access</h4>
+    }
+}
+
+@code {
+    private List<Record> history = new();
+    private bool loading = true;
+    private bool admin;
+    private string user;
+    private string account;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var task = Http.GetFromJsonAsync<List<Record>>("api/Records");
+        user = State.user;
+        admin = State.admin;
+        loading = false;
+        account = State.account;
+        if (admin)
+        {
+            history = await task;
+            history.Sort((a, b) => b.CompareTo(a));
+        }
+    }
+}

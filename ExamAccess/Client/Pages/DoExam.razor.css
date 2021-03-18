@@ -1,0 +1,16 @@
+﻿h1 {
+    text-align: center;
+}
+
+ul {
+    padding: 0;
+}
+
+    ul li {
+        list-style: none;
+    }
+
+.button-holder {
+    margin: 20px 0;
+    text-align: center;
+}

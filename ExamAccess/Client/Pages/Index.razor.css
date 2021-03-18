@@ -1,0 +1,20 @@
+﻿ul {
+    margin: 0;
+    margin-top: 10px;
+}
+
+    ul li {
+        display: flex;
+    }
+
+    ul img {
+        width: 60px;
+        height: 60px;
+        transition: all 0.5s;
+    }
+
+        ul img:hover {
+            width: 65px;
+            height: 65px;
+            transition: all 0.5s;
+        }
