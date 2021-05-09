@@ -4,7 +4,7 @@
 @inject StateContainer State
 @inject HttpClient Http
 
-<h1>Welcome @user to Exam Access</h1>
+<h1>Welcome @State.user to Exam Access</h1>
 @if (loading)
 {
     <p>Loading data...</p>
@@ -12,9 +12,9 @@
 }
 else
 {
-    if (!string.IsNullOrWhiteSpace(user))
+    if (!string.IsNullOrWhiteSpace(State.user))
     {
-        if (admin)
+        if (State.admin)
         {
             <div class="mat-layout-grid-cell mat-layout-grid-cell-span-12 mat-elevation-z5 index-row-item mdc-theme--surface" style="max-height: 600px; overflow-y:scroll; margin-top: 50px;">
                 <table class="table">
@@ -53,18 +53,13 @@ else
 @code {
     private List<Record> history = new();
     private bool loading = true;
-    private bool admin;
-    private string user;
-    private string account;
 
     protected override async Task OnInitializedAsync()
     {
         var task = Http.GetFromJsonAsync<List<Record>>("api/Records");
-        user = State.user;
-        admin = State.admin;
+
         loading = false;
-        account = State.account;
-        if (admin)
+        if (State.admin)
         {
             history = await task;
             history.Sort((a, b) => b.CompareTo(a));

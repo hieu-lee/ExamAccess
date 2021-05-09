@@ -13,7 +13,7 @@
 }
 else
 {
-    if (!logged)
+    if (!State.logged)
     {
         if (!register)
         {
@@ -52,7 +52,6 @@ else
     public bool register { get; set; } = false;
     private bool admin = false;
     private bool loading = true;
-    private bool logged;
     private string fname = string.Empty;
     private string lname = string.Empty;
     private string username = string.Empty;
@@ -62,7 +61,6 @@ else
     protected override void OnInitialized()
     {
         t = GetAccounts();
-        logged = State.logged;
         loading = false;
         StateHasChanged();
     }
@@ -142,7 +140,7 @@ else
                 admin = false;
                 State.user = name;
                 State.account = username;
-                State.logged = logged;
+                State.logged = true;
                 await JsRuntime.InvokeAsync<object>("alert", "Successfully logged in with your new account!");
                 await task;
                 navigationManager.NavigateTo("/home");
@@ -154,7 +152,7 @@ else
                 admin = false;
                 State.user = name;
                 State.account = username;
-                State.logged = logged;
+                State.logged = true;
                 await JsRuntime.InvokeAsync<object>("alert", "Successfully logged in with your new account!");
                 await task;
                 navigationManager.NavigateTo("/home");
@@ -175,7 +173,6 @@ else
         State.admin = false;
         State.logged = false;
         await JsRuntime.InvokeAsync<object>("alert", "Successfully logged out!");
-        logged = false;
         StateHasChanged();
     }
 }

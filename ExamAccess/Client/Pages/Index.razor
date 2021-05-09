@@ -7,7 +7,7 @@
 @inject IJSRuntime JsRuntime;
 @inject HttpClient Http;
 
-<h1>Welcome @user to Exam Access</h1>
+<h1>Welcome @State.user to Exam Access</h1>
 @if (loading)
 {
     <p>Loading data...</p>
@@ -15,12 +15,12 @@
 }
 else
 {
-    if (logged)
+    if (State.logged)
     {
         <h5>Available exams:</h5>
         if (!DoExam)
         {
-            if (admin)
+            if (State.admin)
             {
                 if (Exams.Count == 0)
                 {
@@ -86,10 +86,6 @@ else
     public bool DoExam { get; set; } = false;
     [Parameter]
     public string RemovedExam { get; set; } = null;
-    private bool logged = false;
-    private bool admin = false;
-    private string user = string.Empty;
-    private string account = string.Empty;
     private string NewExamCode;
     private bool loading = true;
     private Dictionary<string, Tuple<string, int>> Exams = new();
@@ -98,16 +94,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         var task = Http.GetFromJsonAsync<IEnumerable<Exam>>("api/Exams");
-        admin = State.admin;
-        user = State.user;
-        account = State.account;
-        logged = State.logged;
         loading = false;
-        if (logged)
+        if (State.logged)
         {
-            if (!admin && !string.IsNullOrWhiteSpace(account))
+            if (!State.admin && !string.IsNullOrWhiteSpace(State.account))
             {
-                var t = Http.GetFromJsonAsync<List<ExamResult>>($"api/Accounts/{account}");
+                var t = Http.GetFromJsonAsync<List<ExamResult>>($"api/Accounts/{State.account}");
                 var exams = await task;
                 Parallel.ForEach(exams, exam =>
                 {

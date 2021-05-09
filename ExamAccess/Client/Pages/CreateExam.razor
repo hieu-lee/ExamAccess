@@ -102,7 +102,7 @@ else
     private bool autoadd = true;
     private bool loading = true;
     private int minutes;
-    private bool verify = false;
+    private bool verify => (State.logged && State.admin);
     private bool Privacy = false;
     private string prevLabel = "Question";
     private int prevTimeLimit = 0;
@@ -118,7 +118,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        verify = (State.logged && State.admin);
         loading = false;
         if (verify)
         {

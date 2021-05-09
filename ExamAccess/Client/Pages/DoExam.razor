@@ -14,7 +14,7 @@
 }
 else
 {
-    if (verify)
+    if (State.logged)
     {
         <div class="mat-layout-grid-cell mat-layout-grid-cell-span-12 mat-elevation-z5 index-row-item mdc-theme--surface" style="padding: 10px; margin-bottom: 20px;">
             <h1>@ExamName</h1>
@@ -47,16 +47,13 @@ else
     public string ExamName { get; set; }
 
     public string questionLabel { get; set; } = "Question";
-    private bool admin = false;
     private bool loading = true;
     private int minutes;
-    private bool verify = false;
     private bool Privacy = false;
     private bool haveQuesions = false;
     private int TimeLeft;
     private static Timer timer;
     private string TimeDisplay = "none";
-    private string user;
     private List<string> colors = new();
     public Dictionary<int, string> personalWork = new();
     private Dictionary<int, string> solutionKey = new();
@@ -89,12 +86,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        verify = State.logged;
-        admin = State.admin;
-        user = State.account;
         loading = false;
         submitted = false;
-        if (verify)
+        if (State.logged)
         {
             var info = await Http.GetFromJsonAsync<Tuple<List<QuestionInfo>, int, bool, string>>($"api/Exams/{ExamCode}");
             questions = info.Item1;
@@ -179,11 +173,11 @@ else
             var res = Math.Round(percent, 2);
             var task2 = JsRuntime.InvokeAsync<object>("alert", $"You got {score.ToString()}/{max.ToString()} answers correct, and a result of {res.ToString()}%");
             var localrecord = new ExamResult() { examCode = ExamCode, score = res, time = DateTime.Now.ToString() };
-            var universalrecord = new Record() { username = user, examCode = ExamCode, score = res, time = DateTime.Now.ToString() };
+            var universalrecord = new Record() { username = State.account, examCode = ExamCode, score = res, time = DateTime.Now.ToString() };
             List<Task> tasks = new();
-            if (!admin)
+            if (!State.admin)
             {
-                var task3 = Http.PostAsJsonAsync<ExamResult>($"api/Accounts/result/{user}", localrecord);
+                var task3 = Http.PostAsJsonAsync<ExamResult>($"api/Accounts/result/{State.account}", localrecord);
                 tasks.Add(task3);
             }
             var task4 = Http.PostAsJsonAsync<Record>("api/Records", universalrecord);
